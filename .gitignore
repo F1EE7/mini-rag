@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.idea/
+.vscode/
+*.apkg
+assets/tmp/
+.pytest_cache/
+.DS_Store
