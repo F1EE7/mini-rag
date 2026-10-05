@@ -9,3 +9,4 @@ venv/
 assets/tmp/
 .pytest_cache/
 .DS_Store
+.minirag/
