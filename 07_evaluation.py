@@ -13,6 +13,7 @@
 """
 
 import importlib
+import random
 
 _chunking = importlib.import_module("01_chunking")
 _sparse = importlib.import_module("02_sparse_search")
@@ -82,7 +83,11 @@ def _build_chunks(size: int):
 
 
 def run_experiment(size: int, retriever: str, top_k: int = 3) -> dict:
-    """在给定 chunk 大小与检索器下评测，返回平均 recall@k 与 MRR。"""
+    """在给定 chunk 大小与检索器下评测，返回平均 recall@k 与 MRR。
+
+    retriever 额外支持 "random"：随机基线。没有基线的绝对数字是没有
+    区分度的——语料切块数少到接近 top_k 时，随机排序也能拿高分。
+    """
     chunks, relevant = _build_chunks(size)
     texts = [c for c in chunks]
     if retriever == "tfidf":
@@ -95,8 +100,17 @@ def run_experiment(size: int, retriever: str, top_k: int = 3) -> dict:
 
         def search(q):
             return [i for i, _ in index.search(q, top_k)]
+    elif retriever == "random":
+        rng = random.Random(0)  # 固定种子，结果可复现
+
+        def search(q):
+            return rng.sample(range(len(texts)), min(top_k, len(texts)))
     else:
         raise ValueError(f"未知检索器：{retriever}")
+
+    if len(texts) <= top_k:
+        print(f"[警告] size={size} 时语料只切出 {len(texts)} 块（<= top_k={top_k}），"
+              f"任何排序都必然命中，该行数字无区分度——请缩小 top_k 或加大语料。")
 
     recalls, rr = [], []
     for question, para_id in QA_SET:
@@ -107,8 +121,8 @@ def run_experiment(size: int, retriever: str, top_k: int = 3) -> dict:
     return {"size": size, "retriever": retriever, "recall": sum(recalls) / len(recalls), "mrr": sum(rr) / len(rr)}
 
 
-def run_ablation(sizes=(40, 80, 160, 320), retrievers=("tfidf", "bm25"), top_k: int = 3) -> list[dict]:
-    """消融实验：变 chunk 大小 × 检索器，输出对比表并尝试出图。"""
+def run_ablation(sizes=(40, 80, 160, 320), retrievers=("tfidf", "bm25", "random"), top_k: int = 3) -> list[dict]:
+    """消融实验：变 chunk 大小 × 检索器（含随机基线），输出对比表并尝试出图。"""
     rows = [run_experiment(s, r, top_k) for s in sizes for r in retrievers]
 
     print(f"\n| chunk 大小 | 检索器 | recall@{top_k} | MRR |")
@@ -126,12 +140,12 @@ def run_ablation(sizes=(40, 80, 160, 320), retrievers=("tfidf", "bm25"), top_k: 
         plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC", "SimHei", "Microsoft YaHei"]
         plt.rcParams["axes.unicode_minus"] = False
         fig, ax = plt.subplots(figsize=(7, 4))
-        width = 0.35
+        width = 0.8 / len(retrievers)
         xs = range(len(sizes))
         for off, r in enumerate(retrievers):
             ys = [row["recall"] for row in rows if row["retriever"] == r]
             ax.bar([x + off * width for x in xs], ys, width, label=r)
-        ax.set_xticks([x + width / 2 for x in xs])
+        ax.set_xticks([x + width * (len(retrievers) - 1) / 2 for x in xs])
         ax.set_xticklabels([str(s) for s in sizes])
         ax.set_xlabel("chunk 大小（字符）")
         ax.set_ylabel(f"recall@{top_k}")

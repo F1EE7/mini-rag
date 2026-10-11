@@ -1,5 +1,7 @@
 import importlib
 
+import pytest
+
 evaluation = importlib.import_module("07_evaluation")
 
 
@@ -19,3 +21,15 @@ def test_run_experiment_returns_valid_metrics():
     row = evaluation.run_experiment(80, "tfidf")
     assert 0.0 <= row["recall"] <= 1.0
     assert 0.0 <= row["mrr"] <= 1.0
+
+
+def test_random_baseline_runs_and_is_deterministic():
+    r1 = evaluation.run_experiment(80, "random")
+    r2 = evaluation.run_experiment(80, "random")
+    assert r1 == r2  # 固定种子，可复现
+    assert 0.0 <= r1["recall"] <= 1.0
+
+
+def test_unknown_retriever_rejected():
+    with pytest.raises(ValueError):
+        evaluation.run_experiment(80, "nope")
