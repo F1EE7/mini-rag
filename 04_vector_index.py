@@ -20,17 +20,27 @@ import numpy as np
 
 
 def kmeans(X: np.ndarray, k: int, iters: int = 5, seed: int = 0):
-    """最朴素的 k-means：随机初始化 → 按内积分配 → 更新中心，重复 iters 轮。"""
+    """最朴素的 k-means：随机初始化 → 按距离分配 → 更新中心，重复 iters 轮。
+
+    距离用欧氏距离，但用恒等式 ||x-c||² = ||x||² - 2x·c + ||c||² 展开——
+    只靠矩阵乘法就能算出全部 N×k 距离，不用真的做三维广播（那会爆内存）。
+    对归一化向量，最近欧氏距离等价于最大内积（||x||² 是每行常数）；
+    对未归一化的向量，两者并不等价，按内积分配就不是标准 k-means 了。
+    空簇保留旧中心，不更新。
+    """
     rng = np.random.default_rng(seed)
     centroids = X[rng.choice(len(X), size=k, replace=False)].copy()
+    x_sq = (X ** 2).sum(axis=1)[:, None]
     assign = None
     for _ in range(iters):
-        assign = np.argmax(X @ centroids.T, axis=1)
+        d2 = x_sq - 2 * (X @ centroids.T) + (centroids ** 2).sum(axis=1)[None, :]
+        assign = np.argmin(d2, axis=1)
         for j in range(k):
             members = X[assign == j]
             if len(members):
                 centroids[j] = members.mean(axis=0)
-    assign = np.argmax(X @ centroids.T, axis=1)
+    d2 = x_sq - 2 * (X @ centroids.T) + (centroids ** 2).sum(axis=1)[None, :]
+    assign = np.argmin(d2, axis=1)
     return centroids, assign
 
 
@@ -72,6 +82,10 @@ if __name__ == "__main__":
     X = np.concatenate(
         [c + rng.standard_normal((N // N_CLUSTERS, D)) for c in centers]
     ).astype(np.float32)
+    # 真实系统的 embedding 一般先归一化（配余弦相似度检索）。归一化后，
+    # 最近欧氏距离与最大内积的排序一致，k-means 聚类和检索用的度量就对齐了
+    # ——这正是 kmeans 注释里说的那个等价条件。
+    X = X / np.linalg.norm(X, axis=1, keepdims=True)
     queries = X[rng.choice(N, size=20, replace=False)]  # 查询与库同分布（真实场景如此）
 
     brute = BruteForceIndex(X)
@@ -81,7 +95,7 @@ if __name__ == "__main__":
     true_top = [brute.search(q, 10) for q in queries]
     t_brute = (time.perf_counter() - t0) * 1000
 
-    print(f"库大小 N={N}，维度 D={D}，查询 20 条")
+    print(f"库大小 N={N}，维度 D={D}，查询 20 条（向量已归一化）")
     print(f"暴力检索总耗时：{t_brute:.1f} ms")
     print(f"{'nprobe':>6} {'耗时(ms)':>10} {'recall@10':>10}")
     for nprobe in (1, 5, 10, 50):

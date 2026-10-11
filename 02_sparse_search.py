@@ -10,6 +10,8 @@
 
 中文没有空格，本模块用"字符二元组（bigram）"切词：把"机器学习"切成
 "机器 / 器学 / 学习"。它不需要任何分词器依赖，是零成本的中文化方案。
+注意 bigram 只在**连续中文串内部**生成，不跨标点、不跨中英文边界，
+否则会产生"好。"、"ow" 这类噪声 token 撑大词表、稀释统计。
 
 运行演示：python 02_sparse_search.py
 """
@@ -20,12 +22,26 @@ from collections import Counter
 import numpy as np
 
 
+_CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
+_ASCII_WORD = re.compile(r"[a-z0-9]+")
+
+
 def bigram_tokenize(text: str) -> list[str]:
-    """中文按相邻两字切 bigram；英文与数字按整词保留。全部转小写。"""
-    text = re.sub(r"\s+", "", text.lower())
-    tokens = [text[i:i + 2] for i in range(len(text) - 1)]
-    tokens += re.findall(r"[a-z0-9]+", text)
-    return tokens or ([text] if text else [])
+    """中文按相邻两字切 bigram（仅限连续中文串内部）；英文与数字按整词保留。
+
+    关键：英文整词要在**未去空白**的原文上提取——先把空白删掉再提取，
+    会让 "hello world" 粘成 "helloworld" 只得到一个伪词，而不是
+    "hello" 和 "world" 两个词。
+    """
+    low = text.lower()
+    tokens: list[str] = []
+    for run in _CJK_RUN.findall(low):
+        if len(run) == 1:
+            tokens.append(run)  # 单字成不了 bigram，保留单字本身
+        else:
+            tokens.extend(run[i:i + 2] for i in range(len(run) - 1))
+    tokens.extend(_ASCII_WORD.findall(low))
+    return tokens
 
 
 class TfidfIndex:
