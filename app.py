@@ -9,6 +9,8 @@
 
 工程要点：索引在 `index` 阶段 fit 一次并持久化（pickle），`ask` 只打分——
 不要每次提问都全量重建索引、重载 embedding 模型。
+安全提示：index.pkl 是 pickle 格式，反序列化可执行任意代码——
+只加载你自己生成的索引文件，不要加载来路不明的 .pkl。
 """
 
 import argparse

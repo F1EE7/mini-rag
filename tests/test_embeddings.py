@@ -51,3 +51,4 @@ def test_oov_word_is_zero_vector():
     emb = embeddings.PPMIEmbedder(dim=8).fit(build_corpus())
     assert np.all(emb.transform("查无此词") == 0)
     assert np.all(emb.doc_vector(["查无此词"]) == 0)
+    assert emb.nearest("查无此词") == []  # OOV 近邻返回空，而不是随机词

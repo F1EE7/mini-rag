@@ -84,6 +84,8 @@ class PPMIEmbedder:
 
     def nearest(self, word: str, k: int = 5) -> list[tuple[str, float]]:
         v = self.transform(word)
+        if not v.any():
+            return []  # OOV 词没有向量，自然也没有近邻
         sims = self.vectors @ v
         out = []
         for i in np.argsort(-sims):
