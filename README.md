@@ -3,15 +3,19 @@
 > 不用 LangChain，不用 LlamaIndex——只用 Python 标准库和 numpy，
 > 亲手实现检索增强生成（RAG）的每一层。
 
+![CI](https://github.com/F1EE7/mini-rag/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.12%20%7C%203.13-blue.svg)
+
 <!-- TODO: 在这里放演示 GIF：python app.py ask "..." 的录屏 -->
 
 ## 这是什么
 
-7 个逐步递进的 Python 文件，每个文件独立可运行、配中文讲解和 pytest 测试。
+8 个逐步递进的 Python 文件，每个文件独立可运行、配中文讲解和 pytest 测试。
 按顺序读完，你将亲手实现：
 
 ```
-文本切块 → TF-IDF 检索 → 词向量 → 向量索引
+文本切块 → TF-IDF 检索 → 词向量 → 向量索引（IVF + HNSW）
         → 混合检索 → 带引用的问答 → 效果评测
 ```
 
@@ -58,6 +62,25 @@ nprobe     耗时(ms)  recall@10
     50       23.6       1.00
 ```
 
+**08 · HNSW 索引**：分层跳表图，与暴力 / IVF 同台对比（N=10000，纯 Python 实现）：
+
+```
+暴力检索总耗时：11.3 ms
+方法         参数         耗时(ms)  recall@10
+IVF        nprobe=5        2.2       0.99
+HNSW       ef=8            6.4       0.78
+HNSW       ef=32          15.4       0.91
+```
+
+比数字更值钱的是踩出来的两条教训（完整过程写在 08 的注释里）：
+
+- **选边不能只取"最近 M 个"**：簇状数据上，跨簇长边会被接收方的溢出裁剪
+  定向剪断，图变成有向孤岛——实测从入口只能到达 174/800 个点，召回 0.45。
+  补上论文的启发式选边（含对溢出表重选）后才修回 796/800，召回 10/10。
+- **纯 Python 里 IVF 快过 HNSW 不是偶然**：IVF 一次大矩阵乘走完 BLAS，
+  HNSW 逐跳走图、每跳都是一次小批量调用。"向量化友好度"是真实的工程选型
+  考量；HNSW 的对数跳数优势要在超大 N 和 C++ 实现（hnswlib / FAISS）里才兑现。
+
 **07 · 消融实验**：chunk 大小 × 检索器的完整对比（图由评测脚本自动生成）。
 注意 **random 基线**——它告诉我们哪一行数字真正有意义：320 那行语料只切出
 2 块（≤ top_k），连随机排序都是 1.000，没有区分度；而 40~160 行里 random
@@ -91,8 +114,9 @@ nprobe     耗时(ms)  recall@10
 | 5 | [05_hybrid_search.py](05_hybrid_search.py) | BM25 + RRF 混合 | 什么时候向量检索反而输给关键词 |
 | 6 | [06_answer.py](06_answer.py) | 带引用的生成 | prompt 组装、防引用幻觉、诚实降级 |
 | 7 | [07_evaluation.py](07_evaluation.py) | recall@k / MRR | 怎么科学地证明改进有效 |
+| 8 | [08_hnsw.py](08_hnsw.py) | 分层图 ANN 索引 | HNSW 原理、启发式选边、有向连通性 |
 
-✅ 全部模块已实现并通过 49 个 pytest 用例（CI 覆盖 Python 3.10 / 3.12）。
+✅ 全部模块已实现并通过 54 个 pytest 用例（CI 覆盖 Python 3.10 / 3.12 / 3.13）。
 
 ## 快速开始
 
